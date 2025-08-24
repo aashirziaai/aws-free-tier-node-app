@@ -1,20 +1,26 @@
+# Lightweight + current LTS
 FROM node:20-alpine
 
-RUN apk add --no-cache curl
-RUN addgroup -S app && adduser -S app -G app
 WORKDIR /usr/src/app
-
-COPY package*.json ./
-RUN npm ci --omit=dev
-
-COPY . .
-
 ENV NODE_ENV=production
-ENV PORT=3000
 
-USER app
+# Create non-root user
+RUN addgroup -g 1001 nodeapp && adduser -S -u 1001 -G nodeapp nodeapp
+
+# Copy only manifests first for better caching
+COPY package*.json ./
+
+# If package-lock.json exists, use npm ci (faster, reproducible),
+# otherwise fall back to npm install so the build doesn't fail
+RUN if [ -f package-lock.json ]; then \
+      npm ci --omit=dev; \
+    else \
+      npm install --omit=dev; \
+    fi
+
+# Copy the rest of the app
+COPY server.js ./
+
 EXPOSE 3000
-
-HEALTHCHECK --interval=30s --timeout=3s --retries=3   CMD curl -fsS http://localhost:3000/health || exit 1
-
-CMD ["npm", "start"]
+USER nodeapp
+CMD ["node", "server.js"]
