@@ -1,0 +1,18 @@
+# Node
+node_modules/
+npm-debug.log
+*.log
+
+# Docker
+*.env
+
+# Terraform (ignore provider cache & state; keep lock file)
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+!.terraform.lock.hcl

@@ -1,0 +1,12 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - unattended-upgrades
+runcmd:
+  - systemctl enable docker
+  - systemctl start docker
+  - usermod -aG docker ubuntu
+  - sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - systemctl reload ssh

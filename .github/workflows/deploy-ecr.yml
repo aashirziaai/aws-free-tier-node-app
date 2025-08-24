@@ -1,0 +1,66 @@
+name: CI-CD (ECR, Node)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPO: free-tier-node-app
+  CONTAINER_NAME: node-free-tier-app
+  APP_PORT: 3000
+  PUBLIC_PORT: 80
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & Push
+        run: |
+          IMAGE_URI=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO }}:latest
+          docker build -t $IMAGE_URI ./app
+          docker push $IMAGE_URI
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+
+      - name: Deploy over SSH (verified host)
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
+          script: |
+            set -e
+            if ! command -v aws >/dev/null; then
+              curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip -q awscliv2.zip
+              sudo ./aws/install
+            fi
+            aws ecr get-login-password --region ${{ env.AWS_REGION }}               | sudo docker login --username AWS --password-stdin ${{ steps.ecr.outputs.registry }}
+            sudo docker pull ${{ env.IMAGE_URI }}
+            sudo docker rm -f ${{ env.CONTAINER_NAME }} || true
+            sudo docker run -d --name ${{ env.CONTAINER_NAME }}               -p ${{ env.PUBLIC_PORT }}:${{ env.APP_PORT }}               --restart unless-stopped               --log-driver json-file --log-opt max-size=10m --log-opt max-file=3               --memory=256m --cpus="0.5"               -e NODE_ENV=production               ${{ env.IMAGE_URI }}
+            sudo docker image prune -f
+
+      - name: Smoke test (HTTP 200)
+        run: |
+          set -e
+          sleep 5
+          curl -fsS http://${{ secrets.EC2_HOST }}/health | jq

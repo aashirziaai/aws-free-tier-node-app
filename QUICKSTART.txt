@@ -1,0 +1,32 @@
+QUICK START
+
+1) AWS CLI login:
+   aws configure   (region: us-east-1, output: json)
+
+2) SSH key (skip if you already have it):
+   Windows PowerShell:
+     New-Item -ItemType Directory -Path "$env:USERPROFILE\.ssh" -Force | Out-Null
+     ssh-keygen -t ed25519 -C "github-cicd" -f "$env:USERPROFILE\.ssh\aws_free_tier"
+
+   Git Bash:
+     mkdir -p ~/.ssh
+     ssh-keygen -t ed25519 -C "github-cicd" -f ~/.ssh/aws_free_tier
+
+3) Provision with Terraform:
+   PowerShell:
+     cd iac/terraform
+     terraform init
+     $PUB = (Resolve-Path "$env:USERPROFILE\.ssh\aws_free_tier.pub").Path
+     terraform apply -auto-approve -var "public_key_path=$PUB" -var "allowed_ssh_cidr=0.0.0.0/0"
+
+   Git Bash (Windows):
+     cd iac/terraform
+     terraform init
+     PUB=$(cygpath -w "$HOME/.ssh/aws_free_tier.pub")
+     terraform apply -auto-approve -var "public_key_path=$PUB" -var "allowed_ssh_cidr=0.0.0.0/0"
+
+4) Get outputs:
+   terraform output
+   # public_ip and public_dns are shown
+
+5) (Optional) CI/CD: See .github/workflows and README hints.
