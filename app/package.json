@@ -1,9 +1,12 @@
 {
   "name": "free-tier-node-app",
   "version": "1.0.0",
-  "description": "Hello from Node on AWS Free Tier (t2.micro)!",
-  "main": "server.js",
   "type": "module",
-  "scripts": { "start": "node server.js" },
-  "dependencies": { "express": "4.19.2" }
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
 }
