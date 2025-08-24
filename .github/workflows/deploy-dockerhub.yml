@@ -1,6 +1,7 @@
 name: CI-CD (Docker Hub, Node Hardened)
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "main" ]
 
@@ -45,16 +46,31 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }} # safe if unset
           fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
           script: |
-            set -e
+            set -euo pipefail
             sudo docker pull ${{ env.IMAGE }}:latest
             sudo docker rm -f ${{ env.CONTAINER_NAME }} || true
-            sudo docker run -d --name ${{ env.CONTAINER_NAME }}               -p ${{ env.PUBLIC_PORT }}:${{ env.APP_PORT }}               --restart unless-stopped               --log-driver json-file --log-opt max-size=10m --log-opt max-file=3               --memory=256m --cpus="0.5"               -e NODE_ENV=production               ${{ env.IMAGE }}:latest
+            sudo docker run -d --name ${{ env.CONTAINER_NAME }} \
+              -p ${{ env.PUBLIC_PORT }}:${{ env.APP_PORT }} \
+              --restart unless-stopped \
+              --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
+              --memory=256m --cpus="0.5" \
+              -e NODE_ENV=production \
+              ${{ env.IMAGE }}:latest
             sudo docker image prune -f
 
       - name: Smoke test (HTTP 200)
         run: |
           set -e
-          sleep 5
-          curl -fsS http://${{ secrets.EC2_HOST }}/health | jq
+          for i in {1..12}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }}/health || true)
+            echo "Attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then
+              body=$(curl -fsS http://${{ secrets.EC2_HOST }}/health || true)
+              echo "$body" | grep -q '"status":"ok"' && exit 0
+            fi
+            sleep 5
+          done
+          echo "Healthcheck failed"; exit 1
